@@ -1,0 +1,175 @@
+---
+title: "Research"
+author: "Amey Ghodke"
+date: "22/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Prep
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(tidytext)
+#library(qdap)
+data<-read_csv2("random_dataset.csv")
+data$id <- as.numeric(factor(data$id, 
+                  levels=unique(data$id)))
+#data$document_id<- sample(50, size = nrow(data), replace = TRUE)
+raw_data<- data %>% mutate(document_id=sample(10, size = nrow(data), replace = TRUE)) %>% mutate(document_id=factor(document_id))
+head(raw_data)
+#raw_data$contents<-trimws(raw_data$contents)
+raw_data$contents<-gsub("[\\]+[n]","",raw_data$contents)
+raw_data$contents<-gsub("http\\S+\\s*", "", raw_data$contents)
+raw_data$contents<-gsub("[[:punct:]]", " ", raw_data$contents)
+raw_data$contents<-trimws(raw_data$contents)
+head(raw_data)
+words_df <-raw_data %>%
+  mutate(line=row_number()) %>%
+  unnest_tokens(bigrams,contents,token="ngrams",n=2)%>%
+  separate(bigrams, into = c("first","second"), sep = " ", remove = FALSE) %>%
+  anti_join(stop_words, by = c("first" = "word")) %>%
+  anti_join(stop_words, by = c("second" = "word")) %>%
+  filter(str_detect(first, "[a-z]") &
+         str_detect(second, "[a-z]"))
+```
+
+##Counting Important Bigrams
+
+```{r}
+words_df %>%
+  count(bigrams, sort = TRUE) %>%
+  top_n(15) %>%
+  mutate(bigrams = reorder(bigrams, n)) %>%
+  ggplot(aes(x = bigrams, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(x = "Unique bigrams",
+      y = "Count",
+      title = "Term Frequency")
+```
+
+```{r}
+ words_df%>%
+  count(document_id,bigrams,sort=TRUE) %>%
+  bind_tf_idf(bigrams,document_id,n) %>%
+  group_by(document_id) %>%
+  top_n(10) %>%
+  ungroup %>%
+  mutate(bigrams = reorder(bigrams,tf_idf)) %>%
+  ggplot(aes(bigrams,tf_idf,fill=document_id))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~document_id,scales="free")+
+  coord_flip()
+```
+
+## Wordcloud
+```{r}
+library(wordcloud)
+pal <- brewer.pal(8,"Dark2")
+
+words_df %>% count(bigrams)%>%
+  with(wordcloud(bigrams, n, random.order = FALSE, max.words = 50,colors=pal))
+```
+## STM
+
+```{r}
+library(stm)
+library(quanteda)
+
+words_dfm<-words_df %>%
+  count(document_id,bigrams,sort=TRUE) %>%
+  cast_dfm(document_id,bigrams,n)
+
+topic_model<-stm(words_dfm,K=10,init.type="Spectral")
+summary(topic_model)
+```
+
+```{r}
+tbeta <- tidy(topic_model)
+
+tbeta %>%
+  group_by(topic) %>%
+  top_n(10) %>%
+  ungroup %>%
+  mutate(term = reorder(term,beta)) %>%
+  ggplot(aes(term,beta,fill=topic))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~topic,scales="free")+
+  coord_flip()
+  
+t_gamma<-tidy(topic_model,matrix="gamma",document_names = rownames(words_dfm))
+ggplot(t_gamma,aes(gamma,fill=as.factor(topic)))+
+  geom_histogram(show.legend=FALSE)+
+  facet_wrap(~topic,ncol=3)
+```
+
+```{r}
+set.seed(12345)
+
+model <- FitLdaModel(dtm = words_dfm, 
+                     k = 20,
+                     iterations = 200, # I usually recommend at least 500 iterations or more
+                     burnin = 180,
+                     alpha = 0.1,
+                     beta = 0.05,
+                     optimize_alpha = TRUE,
+                     calc_likelihood = TRUE,
+                     calc_coherence = TRUE,
+                     calc_r2 = TRUE,
+                     cpus = 2) 
+
+```
+```{r}
+library(topicmodels)
+words_dtm <- words_df %>%
+  count(document_id,bigrams,sort=TRUE) %>%
+  cast_dtm(document_id,bigrams,n)
+lda <- LDA(words_dtm, k = 10, control = list(seed = 1234))
+summary(lda)
+```
+
+```{r}
+topics <- tidy(lda, matrix = "beta")
+topics
+```
+
+Top 5 terms
+
+```{r}
+top_terms <- topics %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms
+```
+```{r}
+ top_terms%>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+```
+
+```{r}
+lda_gamma <- tidy(lda, matrix = "gamma")
+lda_gamma
+```
+
+
+```{r}
+ggplot(lda_gamma, aes(gamma, fill = factor(topic))) +
+  geom_histogram() +
+  facet_wrap(~ document, nrow = 2)
+
+```
