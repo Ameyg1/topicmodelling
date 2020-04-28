@@ -24,9 +24,22 @@ raw_data<- data %>% mutate(document_id=sample(10, size = nrow(data), replace = T
 head(raw_data)
 #raw_data$contents<-trimws(raw_data$contents)
 raw_data$contents<-gsub("[\\]+[n]","",raw_data$contents)
-raw_data$contents<-gsub("http\\S+\\s*", "", raw_data$contents)
-raw_data$contents<-gsub("[[:punct:]]", " ", raw_data$contents)
-raw_data$contents<-trimws(raw_data$contents)
+raw_data$contents <- iconv(raw_data$contents, to = "ASCII", sub = " ")  # Convert to basic ASCII text to avoid silly characters
+raw_data$contents <- tolower(raw_data$contents)  # Make everything consistently lower case
+raw_data$contents <- gsub("RT", " ", raw_data$contents)  # Remove the "RT" (retweet) so duplicates are duplicates
+raw_data$contents <- gsub("@\\w+", " ", raw_data$contents)  # Remove user names (all proper names if you're wise!)
+raw_data$contents <- gsub("http.+ |http.+$", " ", raw_data$contents)  # Remove links
+raw_data$contents <- gsub("[[:punct:]]", " ", raw_data$contents)  # Remove punctuation
+raw_data$contents <- gsub("[ |\t]{2,}", " ", raw_data$contents)  # Remove tabs
+raw_data$contents <- gsub("amp", " ", raw_data$contents)  # "&" is "&amp" in HTML, so after punctuation removed ...
+raw_data$contents <- gsub("^ ", "", raw_data$contents)  # Leading blanks
+raw_data$contents <- gsub(" $", "", raw_data$contents)  # Lagging blanks
+raw_data$contents <- gsub(" +", " ", raw_data$contents) # General spaces (should just do all whitespaces no?)
+#raw_data$contents <- unique(raw_data$contents)  # Now get rid of duplicates!
+
+#raw_data$contents<-gsub("http\\S+\\s*", "", raw_data$contents)
+#raw_data$contents<-gsub("[[:punct:]]", " ", raw_data$contents)
+#raw_data$contents<-trimws(raw_data$contents)
 head(raw_data)
 words_df <-raw_data %>%
   mutate(line=row_number()) %>%
