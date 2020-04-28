@@ -1,0 +1,21 @@
+---
+title: "Tweets"
+author: "Amey Ghodke"
+date: "28/04/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview 
+
+Trying out the rtweet package to gather tweets.
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(rtweet)
+tweets<-search_tweets("#iphone",n=10000,lang="en",include_rts = FALSE)
+```
